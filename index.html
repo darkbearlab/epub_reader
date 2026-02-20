@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>線性閱讀 EPUB 閱讀器</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+    
+    <style>
+        :root { --bg-color: #fdfdfd; --nav-bg: #ffffff; }
+        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; background: var(--bg-color); }
+        
+        #controls { 
+            position: fixed; top: 0; width: 100%; height: 50px;
+            background: var(--nav-bg); display: flex; align-items: center; 
+            gap: 10px; border-bottom: 1px solid #eee; z-index: 100;
+            padding: 0 15px; box-sizing: border-box;
+        }
+
+        /* 閱讀器容器：在滾動模式下，容器本身會長高，由瀏覽器原生滾動條控制 */
+        #viewer { 
+            margin-top: 50px; /* 避開控制欄 */
+            width: 100%; 
+            max-width: 800px; 
+            margin-left: auto; 
+            margin-right: auto;
+            min-height: calc(100vh - 50px);
+        }
+
+        #toc-select { flex-grow: 1; max-width: 300px; padding: 5px; }
+        #status { font-size: 12px; color: #888; white-space: nowrap; }
+
+        /* 隱藏 ePub.js 預設可能產生的橫向滾動 */
+        .epub-container { overflow-x: hidden !important; }
+    </style>
+</head>
+<body>
+
+<div id="controls">
+    <input type="file" id="input" accept=".epub">
+    <select id="toc-select"><option>請選擇檔案</option></select>
+    <span id="status">已儲存</span>
+</div>
+
+<div id="viewer"></div>
+
+<script>
+    let book, rendition;
+    let saveTimeout;
+    const inputElement = document.getElementById("input");
+    const tocSelect = document.getElementById("toc-select");
+    const statusText = document.getElementById("status");
+
+    inputElement.addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = e => loadBook(e.target.result, file.name);
+        reader.readAsArrayBuffer(file);
+    });
+
+    function loadBook(data, fileName) {
+        if (book) book.destroy();
+        document.getElementById("viewer").innerHTML = ""; // 清空舊內容
+        
+        book = ePub(data);
+        
+        // --- 核心設定：線性滾動 ---
+        rendition = book.renderTo("viewer", {
+            width: "100%",
+            height: "100%", // 在滾動模式下，此高度會隨內容自動延伸
+            flow: "scrolled", // 改為滾動模式
+            manager: "default"
+        });
+
+        // 讀取進度並跳轉
+        const savedLocation = localStorage.getItem(`read_pos_linear_${fileName}`);
+        rendition.display(savedLocation || undefined);
+
+        // 載入目錄
+        book.loaded.navigation.then(nav => {
+            tocSelect.innerHTML = '<option value="">目錄跳轉</option>';
+            nav.toc.forEach(chapter => {
+                const option = document.createElement("option");
+                option.textContent = chapter.label.trim();
+                option.value = chapter.href;
+                tocSelect.appendChild(option);
+            });
+        });
+
+        // --- 進度保存邏輯 ---
+        // 在滾動模式下，我們監聽 'relocated' 事件來捕捉當前可見的位置
+        rendition.on("relocated", location => {
+            saveStatus("儲存中...");
+            
+            // 使用 debounce 避免頻繁寫入 LocalStorage
+            clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                localStorage.setItem(`read_pos_linear_${fileName}`, location.start.cfi);
+                saveStatus("進度已同步");
+            }, 500);
+        });
+
+        // 目錄跳轉
+        tocSelect.onchange = (e) => {
+            if (e.target.value) {
+                rendition.display(e.target.value);
+            }
+        };
+    }
+
+    function saveStatus(msg) {
+        statusText.innerText = msg;
+    }
+</script>
+
+</body>
+</html>
