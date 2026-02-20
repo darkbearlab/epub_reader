@@ -3,36 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>線性閱讀 EPUB 閱讀器</title>
+    <title>極簡 EPUB 閱讀器</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
     
     <style>
-        :root { --bg-color: #fdfdfd; --nav-bg: #ffffff; }
-        body { font-family: "PingFang TC", "Microsoft JhengHei", sans-serif; margin: 0; background: var(--bg-color); }
+        :root { --bg-color: #ffffff; --nav-bg: #f8f9fa; }
+        body { font-family: sans-serif; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; background: var(--bg-color); }
         
+        /* 頂部控制欄 */
         #controls { 
-            position: fixed; top: 0; width: 100%; height: 50px;
-            background: var(--nav-bg); display: flex; align-items: center; 
-            gap: 10px; border-bottom: 1px solid #eee; z-index: 100;
-            padding: 0 15px; box-sizing: border-box;
+            padding: 10px; 
+            background: var(--nav-bg); 
+            display: flex; 
+            align-items: center; 
+            gap: 10px; 
+            border-bottom: 1px solid #ddd;
+            flex-wrap: wrap;
+            justify-content: center;
         }
 
-        /* 閱讀器容器：在滾動模式下，容器本身會長高，由瀏覽器原生滾動條控制 */
-        #viewer { 
-            margin-top: 50px; /* 避開控制欄 */
-            width: 100%; 
-            max-width: 800px; 
-            margin-left: auto; 
-            margin-right: auto;
-            min-height: calc(100vh - 50px);
+        #viewer { flex-grow: 1; width: 100%; max-width: 900px; margin: 0 auto; background: white; }
+
+        /* 章節選單樣式 */
+        #toc-select { max-width: 200px; padding: 5px; }
+
+        /* 手機直式瀏覽優化 */
+        @media (max-width: 600px) {
+            #viewer { width: 100%; }
+            #controls { padding: 5px; font-size: 14px; }
+            #toc-select { max-width: 120px; }
         }
-
-        #toc-select { flex-grow: 1; max-width: 300px; padding: 5px; }
-        #status { font-size: 12px; color: #888; white-space: nowrap; }
-
-        /* 隱藏 ePub.js 預設可能產生的橫向滾動 */
-        .epub-container { overflow-x: hidden !important; }
     </style>
 </head>
 <body>
@@ -40,17 +42,16 @@
 <div id="controls">
     <input type="file" id="input" accept=".epub">
     <select id="toc-select"><option>請選擇檔案</option></select>
-    <span id="status">已儲存</span>
+    <button id="prev">上一頁</button>
+    <button id="next">下一頁</button>
 </div>
 
 <div id="viewer"></div>
 
 <script>
     let book, rendition;
-    let saveTimeout;
     const inputElement = document.getElementById("input");
     const tocSelect = document.getElementById("toc-select");
-    const statusText = document.getElementById("status");
 
     inputElement.addEventListener('change', function(e) {
         const file = e.target.files[0];
@@ -61,25 +62,25 @@
 
     function loadBook(data, fileName) {
         if (book) book.destroy();
-        document.getElementById("viewer").innerHTML = ""; // 清空舊內容
         
         book = ePub(data);
         
-        // --- 核心設定：線性滾動 ---
+        // 設定渲染參數
         rendition = book.renderTo("viewer", {
             width: "100%",
-            height: "100%", // 在滾動模式下，此高度會隨內容自動延伸
-            flow: "scrolled", // 改為滾動模式
-            manager: "default"
+            height: "100%",
+            flow: "paginated", // 翻頁模式
+            manager: "default",
+            allowScriptedContent: true
         });
 
-        // 讀取進度並跳轉
-        const savedLocation = localStorage.getItem(`read_pos_linear_${fileName}`);
+        // 讀取進度
+        const savedLocation = localStorage.getItem(`read_pos_${fileName}`);
         rendition.display(savedLocation || undefined);
 
-        // 載入目錄
+        // 章節清單
         book.loaded.navigation.then(nav => {
-            tocSelect.innerHTML = '<option value="">目錄跳轉</option>';
+            tocSelect.innerHTML = '<option value="">目錄索引</option>';
             nav.toc.forEach(chapter => {
                 const option = document.createElement("option");
                 option.textContent = chapter.label.trim();
@@ -88,29 +89,35 @@
             });
         });
 
-        // --- 進度保存邏輯 ---
-        // 在滾動模式下，我們監聽 'relocated' 事件來捕捉當前可見的位置
+        // 紀錄位置
         rendition.on("relocated", location => {
-            saveStatus("儲存中...");
-            
-            // 使用 debounce 避免頻繁寫入 LocalStorage
-            clearTimeout(saveTimeout);
-            saveTimeout = setTimeout(() => {
-                localStorage.setItem(`read_pos_linear_${fileName}`, location.start.cfi);
-                saveStatus("進度已同步");
-            }, 500);
+            localStorage.setItem(`read_pos_${fileName}`, location.start.cfi);
         });
 
-        // 目錄跳轉
-        tocSelect.onchange = (e) => {
-            if (e.target.value) {
-                rendition.display(e.target.value);
-            }
-        };
-    }
+        // 綁定翻頁
+        document.getElementById("next").onclick = () => rendition.next();
+        document.getElementById("prev").onclick = () => rendition.prev();
+        tocSelect.onchange = (e) => e.target.value && rendition.display(e.target.value);
 
-    function saveStatus(msg) {
-        statusText.innerText = msg;
+        // --- 互動支援 ---
+
+        // 1. 鍵盤支援 (主視窗與 iframe 內)
+        const keyListener = (e) => {
+            if (e.key === "ArrowRight") rendition.next();
+            if (e.key === "ArrowLeft") rendition.prev();
+        };
+        document.addEventListener("keyup", keyListener);
+        rendition.on("keyup", keyListener);
+
+        // 2. 觸控滑動支援 (使用 Hammer.js)
+        // 由於 rendition 會在 iframe 內渲染，我們需要在 hook 中處理
+        rendition.on("rendered", (section, view) => {
+            const el = view.document.documentElement;
+            const mc = new Hammer(el);
+            
+            mc.on("swipeleft", () => rendition.next());
+            mc.on("swiperight", () => rendition.prev());
+        });
     }
 </script>
 
