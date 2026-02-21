@@ -35,9 +35,11 @@
             background: var(--bg-color); 
             color: var(--text-color);
             transition: background 0.3s, color 0.3s;
+            /* 關鍵：防止瀏覽器預設手勢 */
+            touch-action: manipulation;
         }
 
-        /* 右上角三點選單 */
+        /* 選單按鈕 */
         .menu-container {
             position: fixed;
             top: 10px;
@@ -58,6 +60,7 @@
             align-items: center;
             justify-content: center;
             opacity: 0.8;
+            touch-action: manipulation;
         }
 
         #dropdown-menu {
@@ -77,16 +80,15 @@
 
         #dropdown-menu.show { display: flex; }
 
-        /* 閱讀器主體：確保不被底部按鈕蓋住 */
         #viewer { 
             flex: 1;
             width: 100%; 
             max-width: 800px; 
             margin: 0 auto; 
             overflow: hidden;
+            touch-action: manipulation;
         }
 
-        /* 底部導覽區塊 */
         #bottom-nav {
             height: 60px;
             background: var(--nav-bg);
@@ -111,6 +113,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            touch-action: manipulation;
         }
 
         .menu-item { display: flex; flex-direction: column; gap: 5px; }
@@ -225,23 +228,36 @@
             }
         };
 
-        // 核心修正：正確監聽 iframe 內部的觸控滑動
         rendition.on("rendered", (section, view) => {
             const frameDoc = view.document.documentElement;
-            const mc = new Hammer(frameDoc);
             
-            // 允許垂直捲動穿透（如果需要），但捕捉水平滑動
-            mc.get('swipe').set({ direction: Hammer.DIRECTION_HORIZONTAL });
+            // 1. 強制禁用雙擊縮放邏輯
+            let lastTouchTime = 0;
+            frameDoc.addEventListener('touchstart', (e) => {
+                const now = Date.now();
+                if (now - lastTouchTime < 300) {
+                    e.preventDefault();
+                }
+                lastTouchTime = now;
+            }, { passive: false });
 
-            mc.on("swipeleft", () => {
-                rendition.next();
-            });
-            mc.on("swiperight", () => {
-                rendition.prev();
-            });
+            // 2. CSS 注入：確保內容本身也禁用縮放手勢
+            const style = view.document.createElement('style');
+            style.textContent = `
+                html, body { 
+                    touch-action: manipulation !important; 
+                    -webkit-text-size-adjust: 100%;
+                }
+            `;
+            view.document.head.appendChild(style);
+
+            // 3. Hammer.js 滑動邏輯
+            const mc = new Hammer(frameDoc);
+            mc.get('swipe').set({ direction: Hammer.DIRECTION_HORIZONTAL });
+            mc.on("swipeleft", () => rendition.next());
+            mc.on("swiperight", () => rendition.prev());
         });
 
-        // 鍵盤支援
         const keyListener = (e) => {
             if (e.key === "ArrowRight") rendition.next();
             if (e.key === "ArrowLeft") rendition.prev();
