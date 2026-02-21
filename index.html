@@ -6,7 +6,6 @@
     <title>極簡 EPUB 閱讀器</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
     
     <style>
         :root { 
@@ -221,6 +220,30 @@
         document.getElementById("next").onclick = () => rendition.next();
         document.getElementById("prev").onclick = () => rendition.prev();
         
+        // ===== 新增：原生滑動手勢邏輯 =====
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        rendition.on('touchstart', event => {
+            touchStartX = event.changedTouches[0].screenX;
+        });
+
+        rendition.on('touchend', event => {
+            touchEndX = event.changedTouches[0].screenX;
+            handleSwipeGesture();
+        });
+
+        function handleSwipeGesture() {
+            const threshold = 50; // 觸發翻頁的最小滑動距離
+            if (touchEndX < touchStartX - threshold) {
+                rendition.next();
+            }
+            if (touchEndX > touchStartX + threshold) {
+                rendition.prev();
+            }
+        }
+        // ==================================
+        
         tocSelect.onchange = (e) => {
             if(e.target.value) {
                 rendition.display(e.target.value);
@@ -231,7 +254,7 @@
         rendition.on("rendered", (section, view) => {
             const frameDoc = view.document.documentElement;
             
-            // 1. 強制禁用雙擊縮放邏輯
+            // 1. 強制禁用雙擊縮放邏輯 (保留以防止誤觸放大)
             let lastTouchTime = 0;
             frameDoc.addEventListener('touchstart', (e) => {
                 const now = Date.now();
@@ -250,12 +273,6 @@
                 }
             `;
             view.document.head.appendChild(style);
-
-            // 3. Hammer.js 滑動邏輯
-            const mc = new Hammer(frameDoc);
-            mc.get('swipe').set({ direction: Hammer.DIRECTION_HORIZONTAL });
-            mc.on("swipeleft", () => rendition.next());
-            mc.on("swiperight", () => rendition.prev());
         });
 
         const keyListener = (e) => {
