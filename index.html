@@ -36,8 +36,16 @@
             transition: background 0.3s, color 0.3s;
         }
         
-        /* 頂部控制欄 */
-        #controls { 
+        /* 頂部控制欄容器 */
+        #top-bar {
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+
+        /* 實際控制列 (支援收合動畫) */
+        #controls-inner { 
             padding: 10px; 
             background: var(--nav-bg); 
             display: flex; 
@@ -46,7 +54,42 @@
             border-bottom: 1px solid var(--border-color);
             flex-wrap: wrap;
             justify-content: center;
-            transition: background 0.3s;
+            transition: max-height 0.3s ease, padding 0.3s ease, opacity 0.3s ease;
+            max-height: 300px; /* 設定一個足夠大的高度供展開動畫使用 */
+            overflow: hidden;
+            opacity: 1;
+        }
+
+        /* 收起時的狀態 */
+        #controls-inner.collapsed {
+            max-height: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            border-bottom-color: transparent;
+            opacity: 0;
+        }
+
+        /* 收合按鈕的懸浮容器 */
+        #toggle-container {
+            height: 0;
+            display: flex;
+            justify-content: center;
+            position: relative;
+            z-index: 11;
+        }
+
+        /* 收合按鈕外觀 */
+        #toggle-btn {
+            background: var(--nav-bg);
+            border: 1px solid var(--border-color);
+            border-top: none;
+            border-radius: 0 0 8px 8px;
+            padding: 2px 20px;
+            font-size: 12px;
+            cursor: pointer;
+            color: var(--text-color);
+            transform: translateY(-1px); /* 微調位置以蓋住原本的邊線 */
+            transition: background 0.3s, color 0.3s;
         }
 
         /* 按鈕與選單基本樣式 */
@@ -64,7 +107,7 @@
             width: 100%; 
             max-width: 900px; 
             margin: 0 auto; 
-            background: transparent; /* 改為透明，讓書本背景色生效 */
+            background: transparent; 
         }
 
         /* 章節選單樣式 */
@@ -73,24 +116,43 @@
         /* 手機直式瀏覽優化 */
         @media (max-width: 600px) {
             #viewer { width: 100%; }
-            #controls { padding: 5px; font-size: 14px; }
+            #controls-inner { padding: 5px; font-size: 14px; }
             #toc-select { max-width: 120px; }
         }
     </style>
 </head>
 <body>
 
-<div id="controls">
-    <input type="file" id="input" accept=".epub">
-    <select id="toc-select"><option>請選擇檔案</option></select>
-    <button id="prev">上一頁</button>
-    <button id="next">下一頁</button>
-    <button id="theme-toggle">夜間模式</button>
+<div id="top-bar">
+    <div id="controls-inner">
+        <input type="file" id="input" accept=".epub">
+        <select id="toc-select"><option>請選擇檔案</option></select>
+        <button id="prev">上一頁</button>
+        <button id="next">下一頁</button>
+        <button id="theme-toggle">夜間模式</button>
+    </div>
+    <div id="toggle-container">
+        <button id="toggle-btn">▲ 收起</button>
+    </div>
 </div>
 
 <div id="viewer"></div>
 
 <script>
+    // --- 新增的收合面板邏輯 ---
+    const toggleBtn = document.getElementById("toggle-btn");
+    const controlsInner = document.getElementById("controls-inner");
+
+    toggleBtn.addEventListener('click', () => {
+        controlsInner.classList.toggle('collapsed');
+        if (controlsInner.classList.contains('collapsed')) {
+            toggleBtn.textContent = '▼ 展開';
+        } else {
+            toggleBtn.textContent = '▲ 收起';
+        }
+    });
+    // --------------------------
+
     let book, rendition;
     const inputElement = document.getElementById("input");
     const tocSelect = document.getElementById("toc-select");
