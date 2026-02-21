@@ -2,8 +2,8 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EPUB Reader</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>極簡 EPUB 閱讀器</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.5/jszip.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/epubjs/dist/epub.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
@@ -15,7 +15,6 @@
             --text-color: #333333;
             --border-color: #ddd;
             --menu-shadow: rgba(0,0,0,0.1);
-            --fab-bg: rgba(248, 249, 250, 0.8);
         }
 
         body.dark-mode {
@@ -24,12 +23,13 @@
             --text-color: #e0e0e0;
             --border-color: #444;
             --menu-shadow: rgba(0,0,0,0.5);
-            --fab-bg: rgba(45, 45, 45, 0.8);
         }
 
         body { 
             font-family: sans-serif; 
             margin: 0; 
+            display: flex;
+            flex-direction: column;
             height: 100vh; 
             overflow: hidden; 
             background: var(--bg-color); 
@@ -37,35 +37,34 @@
             transition: background 0.3s, color 0.3s;
         }
 
-        /* 懸浮三點按鈕 - 右上角 */
+        /* 右上角三點選單 */
         .menu-container {
             position: fixed;
-            top: 15px;
-            right: 15px;
+            top: 10px;
+            right: 10px;
             z-index: 1000;
         }
 
         #menu-btn {
-            background: var(--fab-bg);
+            background: var(--nav-bg);
             border: 1px solid var(--border-color);
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             font-size: 20px;
             cursor: pointer;
-            backdrop-filter: blur(5px);
             color: var(--text-color);
             display: flex;
             align-items: center;
             justify-content: center;
+            opacity: 0.8;
         }
 
-        /* 下拉選單樣式 */
         #dropdown-menu {
             display: none;
             position: absolute;
             right: 0;
-            top: 50px;
+            top: 45px;
             background: var(--nav-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
@@ -78,40 +77,43 @@
 
         #dropdown-menu.show { display: flex; }
 
-        .menu-item { display: flex; flex-direction: column; gap: 5px; }
-        .menu-item label { font-size: 12px; opacity: 0.8; }
-
-        /* 底部懸浮翻頁按鈕 */
-        .floating-nav {
-            position: fixed;
-            bottom: 30px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            gap: 20px;
-            z-index: 999;
-        }
-
-        .fab {
-            background: var(--fab-bg);
-            color: var(--text-color);
-            border: 1px solid var(--border-color);
-            padding: 10px 20px;
-            border-radius: 25px;
-            cursor: pointer;
-            backdrop-filter: blur(5px);
-            box-shadow: 0 2px 8px var(--menu-shadow);
-            font-size: 14px;
-            min-width: 80px;
-        }
-
+        /* 閱讀器主體：確保不被底部按鈕蓋住 */
         #viewer { 
-            height: 100vh;
+            flex: 1;
             width: 100%; 
             max-width: 800px; 
             margin: 0 auto; 
+            overflow: hidden;
         }
 
+        /* 底部導覽區塊 */
+        #bottom-nav {
+            height: 60px;
+            background: var(--nav-bg);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            padding: 0 20px;
+            z-index: 100;
+        }
+
+        .nav-btn {
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            height: 40px;
+            width: 80px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 18px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .menu-item { display: flex; flex-direction: column; gap: 5px; }
         button, select, input[type="file"] {
             background: var(--bg-color);
             color: var(--text-color);
@@ -119,8 +121,6 @@
             padding: 8px;
             border-radius: 4px;
         }
-
-        #toc-select { width: 100%; }
     </style>
 </head>
 <body>
@@ -129,11 +129,11 @@
     <button id="menu-btn">⋮</button>
     <div id="dropdown-menu">
         <div class="menu-item">
-            <label>開啟書籍</label>
+            <label style="font-size: 12px;">開啟書籍</label>
             <input type="file" id="input" accept=".epub">
         </div>
         <div class="menu-item">
-            <label>目錄索引</label>
+            <label style="font-size: 12px;">目錄索引</label>
             <select id="toc-select"><option>請先載入檔案</option></select>
         </div>
         <hr style="width:100%; border:0; border-top:1px solid var(--border-color); margin: 5px 0;">
@@ -141,12 +141,12 @@
     </div>
 </div>
 
-<div class="floating-nav">
-    <button class="fab" id="prev">上一頁</button>
-    <button class="fab" id="next">下一頁</button>
-</div>
-
 <div id="viewer"></div>
+
+<div id="bottom-nav">
+    <button class="nav-btn" id="prev">&lt;</button>
+    <button class="nav-btn" id="next">&gt;</button>
+</div>
 
 <script>
     let book, rendition;
@@ -156,7 +156,6 @@
     const menuBtn = document.getElementById("menu-btn");
     const dropdownMenu = document.getElementById("dropdown-menu");
 
-    // 選單開關
     menuBtn.onclick = (e) => {
         dropdownMenu.classList.toggle('show');
         e.stopPropagation();
@@ -165,7 +164,6 @@
     document.onclick = () => dropdownMenu.classList.remove('show');
     dropdownMenu.onclick = (e) => e.stopPropagation();
 
-    // 主題邏輯
     const themes = {
         light: { 'body': { 'background': '#ffffff !important', 'color': '#333333 !important' } },
         dark: { 'body': { 'background': '#1a1a1a !important', 'color': '#e0e0e0 !important' } }
@@ -227,18 +225,29 @@
             }
         };
 
-        // 快捷鍵與滑動
+        // 核心修正：正確監聽 iframe 內部的觸控滑動
+        rendition.on("rendered", (section, view) => {
+            const frameDoc = view.document.documentElement;
+            const mc = new Hammer(frameDoc);
+            
+            // 允許垂直捲動穿透（如果需要），但捕捉水平滑動
+            mc.get('swipe').set({ direction: Hammer.DIRECTION_HORIZONTAL });
+
+            mc.on("swipeleft", () => {
+                rendition.next();
+            });
+            mc.on("swiperight", () => {
+                rendition.prev();
+            });
+        });
+
+        // 鍵盤支援
         const keyListener = (e) => {
             if (e.key === "ArrowRight") rendition.next();
             if (e.key === "ArrowLeft") rendition.prev();
         };
         document.addEventListener("keyup", keyListener);
         rendition.on("keyup", keyListener);
-        rendition.on("rendered", (section, view) => {
-            const mc = new Hammer(view.document.documentElement);
-            mc.on("swipeleft", () => rendition.next());
-            mc.on("swiperight", () => rendition.prev());
-        });
     }
 </script>
 
